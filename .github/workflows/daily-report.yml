@@ -25,7 +25,7 @@ jobs:
     
     - name: Generate report
       env:
-        GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+        GH_PAT: ${{ secrets.GH_PAT }}  # GITHUB_TOKENからGH_PATに変更
       run: python analyzer.py
     
     - name: Send email
