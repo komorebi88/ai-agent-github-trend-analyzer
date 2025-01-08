@@ -132,6 +132,7 @@ class GitHubTrendAnalyzer:
 
     def analyze_trends(self, trending_repos):
         """より具体的なトレンドを分析して要約を生成"""
+        # 詳細な特徴分析
         features = {
             'tool_type': [],      # ツールの種類
             'integrations': [],   # 統合されているサービス/ツール
@@ -139,6 +140,7 @@ class GitHubTrendAnalyzer:
             'use_cases': []       # 具体的なユースケース
         }
         
+        # 各リポジトリの詳細分析
         for repo in trending_repos:
             desc = (repo['description'] or '').lower()
             readme = repo.get('readme_content', '').lower()
@@ -168,6 +170,7 @@ class GitHubTrendAnalyzer:
             if 'coding assistant' in content or 'development' in content:
                 features['use_cases'].append('開発支援')
 
+        # 最も言及の多い特徴を抽出
         trends = []
         for category, items in features.items():
             if items:
@@ -181,10 +184,12 @@ class GitHubTrendAnalyzer:
                 elif category == 'use_cases' and items:
                     trends.append(f"{most_common}向けの特化型エージェントの開発が活発です")
 
+        # 要約をフォーマット
         summary = f"# AI Agent GitHub Trend Report\n\n"
         summary += f"生成日時: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
         summary += "## 本日のトレンド要約\n\n"
         
+        # トレンドが見つかった場合のみ表示
         main_points = [t for t in trends if t][:3]
         if main_points:
             for point in main_points:
@@ -194,21 +199,100 @@ class GitHubTrendAnalyzer:
         summary += "\n"
         
         return summary
+        return summary
 
-    def translate_description(self, text):
-        """説明文を日本語に要約（簡易版）"""
-        if not text or text == 'No description':
+    def analyze_repository_content(self, description, readme_content):
+        """リポジトリの内容を詳細に分析"""
+        content = (description or '').lower() + ' ' + (readme_content or '').lower()
+        
+        # 主な特徴を抽出
+        features = {
+            'framework': 'framework' in content or 'library' in content,
+            'autonomous': 'autonomous' in content or 'self-operating' in content,
+            'assistant': 'assistant' in content or 'chat' in content,
+            'multi_agent': 'multi agent' in content or 'multi-agent' in content,
+            'llm': 'llm' in content or 'language model' in content or 'gpt' in content,
+            'tools': 'tool' in content or 'plugin' in content,
+            'rag': 'rag' in content or 'retrieval' in content,
+            'web': 'browser' in content or 'web' in content,
+            'api': 'api' in content or 'rest' in content
+        }
+        
+        # 技術スタックを抽出
+        tech_stack = []
+        if 'python' in content: tech_stack.append('Python')
+        if 'javascript' in content or 'nodejs' in content: tech_stack.append('JavaScript')
+        if 'typescript' in content: tech_stack.append('TypeScript')
+        
+        # 統合サービスを抽出
+        integrations = []
+        if 'discord' in content: integrations.append('Discord')
+        if 'slack' in content: integrations.append('Slack')
+        if 'telegram' in content: integrations.append('Telegram')
+        
+        # ユースケースを抽出
+        use_cases = []
+        if 'development' in content or 'coding' in content: use_cases.append('開発支援')
+        if 'trading' in content or 'market' in content: use_cases.append('市場分析')
+        if 'research' in content or 'academic' in content: use_cases.append('研究支援')
+        if 'data analysis' in content or 'analytics' in content: use_cases.append('データ分析')
+
+        return features, tech_stack, integrations, use_cases
+
+    def translate_description(self, description, readme_content=''):
+        """説明文を日本語に要約（詳細版）"""
+        if not description and not readme_content:
             return "説明なし"
+        
+        # READMEからプロジェクト名と説明を抽出
+        readme_lines = readme_content.split('\n') if readme_content else []
+        main_description = ''
+        
+        # READMEの最初の意味のある行を探す
+        for line in readme_lines:
+            line = line.strip()
+            if line and not line.startswith('#') and not line.startswith('!['):
+                main_description = line
+                break
+        
+        # 説明がない場合はdescriptionを使用
+        if not main_description:
+            main_description = description
             
-        text = text.lower()
-        if "framework" in text:
-            return "AIエージェント開発フレームワーク"
-        elif "autonomous" in text:
-            return "自律型AIエージェントシステム"
-        elif "assistant" in text:
-            return "AIアシスタント"
-        else:
-            return text[:100] + "..."  # 長い説明は省略
+        # ブロックチェーン/Web3関連キーワード
+        blockchain_terms = {
+            'on-chain': 'オンチェーン',
+            'smart contract': 'スマートコントラクト',
+            'validator': 'バリデータ',
+            'infrastructure': 'インフラストラクチャ',
+            'gateway': 'ゲートウェイ'
+        }
+        
+        # 日本語に翻訳
+        translated = main_description.lower()
+        for eng, jpn in blockchain_terms.items():
+            translated = translated.replace(eng.lower(), jpn)
+            
+        # 一般的な説明を日本語化
+        translated = (
+            translated
+            .replace('ai-powered', 'AI駆動の')
+            .replace('framework', 'フレームワーク')
+            .replace('efficient', '効率的な')
+            .replace('unified', '統合された')
+            .replace('adaptive', '適応型の')
+            .replace('automation', '自動化')
+            .replace('seamless', 'シームレスな')
+            .replace('scalability', 'スケーラビリティ')
+            .replace('precision', '高精度')
+        )
+        
+        # 文章を整形
+        translated = translated.capitalize()
+        if not translated.endswith('.'):
+            translated = translated + '。'
+            
+        return translated
 
     def save_report(self, trending_repos, filename="ai_agent_trends_report.md"):
         """マークダウンレポートを保存する"""
@@ -220,16 +304,19 @@ class GitHubTrendAnalyzer:
                 f.write(report)
             return
 
+        # 要約を生成
         report = self.analyze_trends(trending_repos)
         
+        # 各リポジトリの詳細
         for i, repo in enumerate(trending_repos, 1):
             report += f"## {i}. **[{repo['name']}]({repo['url']})**\n\n"
-            report += f"**概要**: {self.translate_description(repo['description'])}\n\n"
+            report += f"**概要**: {self.translate_description(repo['description'], repo['readme_content'])}\n\n"
             report += f"**統計情報**:\n"
             report += f"- スター数: {repo['stars']} (1日あたり {repo['stars_per_day']})\n"
             report += f"- フォーク数: {repo['forks']} (1日あたり {repo['forks_per_day']})\n"
             report += f"- 作成日: {repo['created_at']}\n"
             
+            # 作成者情報
             owner = repo['owner']
             report += f"\n**作成者情報**:\n"
             report += f"- 名前: {owner['name'] or owner['username']}\n"
@@ -238,6 +325,7 @@ class GitHubTrendAnalyzer:
             if owner['blog']:
                 report += f"- ブログ/サイト: {owner['blog']}\n"
 
+            # トークン情報（存在する場合のみ）
             if repo['has_token']:
                 report += f"\n**トークン情報**:\n"
                 report += "- トークンの存在が確認されました\n"
