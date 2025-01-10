@@ -25,8 +25,14 @@ jobs:
     
     - name: Generate report
       env:
-        GH_PAT: ${{ secrets.GH_PAT }}  # GITHUB_TOKENからGH_PATに変更
-      run: python analyzer.py
+        GH_PAT: ${{ secrets.GH_PAT }}
+      run: |
+        echo "Checking token availability..."
+        if [ -z "$GH_PAT" ]; then
+          echo "Token is not set"
+          exit 1
+        fi
+        python analyzer.py
     
     - name: Send email
       run: |
