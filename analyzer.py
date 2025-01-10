@@ -157,124 +157,72 @@ class GitHubTrendAnalyzer:
         return sorted(trending_repos, key=lambda x: x['stars_per_day'], reverse=True)
 
     def extract_and_translate_description(self, description, readme_content):
-        """リポジトリの説明を抽出して翻訳（2-3行に要約）"""
-        
-        def clean_text(text):
-            """特殊文字とマークアップの除去"""
-            text = re.sub(r'<[^>]+>', '', text)  # HTMLタグの除去
-            text = re.sub(r'\[([^\]]*)\]\([^)]*\)', r'\1', text)  # Markdownリンクの除去
-            text = re.sub(r'[#*`|]', '', text)  # 特殊文字の除去
-            text = re.sub(r'【[^】]*】', '', text)  # 装飾的な括弧の除去
-            text = re.sub(r'^\s*[-*]\s*', '', text)  # リストマーカーの除去
-            text = text.strip()
-            return text
-
-        def get_content_language(text):
-            """テキストの言語を判定"""
-            if re.search(r'[\u4e00-\u9fff]', text):
-                return 'zh'
-            if re.search(r'[\u3040-\u30ff]', text):
-                return 'ja'
-            return 'en'
-
-        def extract_main_content():
-            """主要な説明文を抽出"""
-            if not readme_content and not description:
-                return ""
-
-            # READMEの解析
-            if readme_content:
-                lines = readme_content.split('\n')
-                content_blocks = []
-                current_block = []
-
-                for line in lines:
-                    line = clean_text(line)
-                    if not line:
-                        if current_block:
-                            content_blocks.append(' '.join(current_block))
-                            current_block = []
-                        continue
-
-                    # 説明文として適切な行を判定
-                    if len(line) > 30 and not any(x in line.lower() for x in [
-                        'installation', 'prerequisites', 'getting started',
-                        'license', 'download', 'requirements', 'contribution'
-                    ]):
-                        current_block.append(line)
-                        if len(current_block) >= 2:  # 2行まで取得
+        """リポジトリの説明を抽出して翻訳"""
+        # READMEから主要な説明を抽出
+        main_content = ''
+        if readme_content:
+            lines = readme_content.split('\n')
+            content_lines = []
+            for line in lines:
+                # HTMLタグと特殊な記号を除去
+                line = re.sub(r'<[^>]+>', '', line)
+                line = line.strip()
+                if line and not line.startswith(('#', '!', '[', '|', '-', '>')):
+                    # 言語切り替えなどの特殊な行を除外
+                    if not any(x in line.lower() for x in ['readme', 'language', 'english', '中文']):
+                        content_lines.append(line)
+                        if len(content_lines) == 3:  # 最初の意味のある3行を取得
                             break
-
-                if current_block:
-                    content_blocks.append(' '.join(current_block))
-
-                if content_blocks:
-                    return content_blocks[0]
-
-            return clean_text(description) if description else ""
-
-        def translate_to_japanese(text):
-            """英語から日本語への翻訳"""
-            # 言語判定
-            lang = get_content_language(text)
-            if lang == 'ja':
-                return text
-            if lang == 'zh':
-                return "AIエージェントに関連するオープンソースプロジェクト。世界中の優れた実装例や研究成果を集約しています。"
-
-            # 専門用語の翻訳辞書
-            terms = {
-                'ai agent': 'AIエージェント',
-                'artificial intelligence': '人工知能',
-                'machine learning': '機械学習',
-                'deep learning': '深層学習',
-                'autonomous': '自律型',
-                'automation': '自動化',
-                'framework': 'フレームワーク',
-                'platform': 'プラットフォーム',
-                'research': '研究',
-                'development': '開発',
-                'implementation': '実装',
-                'integration': '統合',
-                'workflow': 'ワークフロー',
-                'language model': '言語モデル',
-                'llm': 'LLM',
-                'multi-agent': 'マルチエージェント',
-                'computer use': 'コンピュータ利用',
-                'scientific discovery': '科学的発見',
-                'critical thinking': '批判的思考',
-                'decision-making': '意思決定'
-            }
-
-            # 翻訳処理
-            text = text.lower()
-            for eng, jpn in terms.items():
-                text = text.replace(eng, jpn)
-
-            # 文分割と整形
-            sentences = re.split(r'[.。!！?？]', text)
-            valid_sentences = []
-            
-            for sentence in sentences:
-                sentence = sentence.strip()
-                if len(sentence) > 10:  # 意味のある長さの文のみを選択
-                    sentence = sentence.capitalize()
-                    if not sentence.endswith(('。', '.')):
-                        sentence += '。'
-                    valid_sentences.append(sentence)
-            
-            return valid_sentences[:2]  # 最大2文に制限
-
-        # メイン処理
-        main_content = extract_main_content()
-        if not main_content:
+            main_content = ' '.join(content_lines)
+        
+        # 説明がない場合はdescriptionを使用
+        if not main_content and description:
+            main_content = description
+        elif not main_content:
             return "説明が提供されていません。"
 
-        translated_sentences = translate_to_japanese(main_content)
-        if not translated_sentences:
-            return "説明を解析できませんでした。"
+        # 翻訳と要約
+        translated = self._translate_to_japanese(main_content)
+        # 3行以内に要約
+        summary = self._summarize_content(translated)
+        
+        return summary
 
-        return '\n'.join(translated_sentences)
+    def _translate_to_japanese(self, text):
+        """英語から日本語への基本的な翻訳"""
+        # 基本的な用語の翻訳辞書
+        terms = {
+            'ai agent': 'AIエージェント',
+            'framework': 'フレームワーク',
+            'autonomous': '自律型',
+            'research': '研究',
+            'workflow': 'ワークフロー',
+            'implementation': '実装',
+            'development': '開発',
+            'experimental': '実験的',
+            'repository': 'リポジトリ',
+            'resources': 'リソース',
+            'collection': 'コレクション',
+            'computer use': 'コンピュータ利用',
+            'machine learning': '機械学習',
+        }
+        
+        translated = text.lower()
+        for eng, jpn in terms.items():
+            translated = translated.replace(eng, jpn)
+        
+        return translated.capitalize()
+
+    def _summarize_content(self, text):
+        """内容を3行以内に要約"""
+        sentences = re.split(r'[.。]', text)
+        sentences = [s.strip() for s in sentences if s.strip()]
+        
+        if len(sentences) > 3:
+            sentences = sentences[:3]
+        
+        summary = '。\n'.join(sentences) + '。'
+        return summary
 
     def format_report(self, trending_repos):
         """レポートを整形"""
