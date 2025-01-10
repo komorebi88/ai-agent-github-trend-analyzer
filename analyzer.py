@@ -1,4 +1,5 @@
 import os
+import re
 from datetime import datetime, timedelta
 import requests
 import time
@@ -39,25 +40,9 @@ class GitHubTrendAnalyzer:
             if content:
                 readme_content = base64.b64decode(content).decode('utf-8')
 
-        token_indicators = {
-            'has_token': False,
-            'token_info': [],
+        return {
             'readme_content': readme_content
         }
-        
-        token_keywords = [
-            'token contract', 'ERC20', 'ERC721', 'tokenomics',
-            'token address', 'smart contract', 'token sale',
-            'ICO', 'IDO', 'token distribution'
-        ]
-        
-        combined_text = (readme_content or '').lower()
-        for keyword in token_keywords:
-            if keyword in combined_text:
-                token_indicators['has_token'] = True
-                token_indicators['token_info'].append(keyword)
-        
-        return token_indicators
 
     def get_user_info(self, username):
         """ユーザーの情報を取得（Twitter含む）"""
@@ -117,8 +102,6 @@ class GitHubTrendAnalyzer:
                     'created_at': created_at.strftime('%Y-%m-%d'),
                     'stars_per_day': round(stars_per_day, 2),
                     'forks_per_day': round(forks_per_day, 2),
-                    'has_token': repo_details['has_token'],
-                    'token_details': repo_details['token_info'],
                     'readme_content': repo_details['readme_content'],
                     'owner': {
                         'username': owner_username,
@@ -131,8 +114,7 @@ class GitHubTrendAnalyzer:
         return sorted(trending_repos, key=lambda x: x['stars_per_day'], reverse=True)
 
     def analyze_trends(self, trending_repos):
-        """より具体的なトレンドを分析して要約を生成"""
-        # 詳細な特徴分析
+        """トレンドを分析して要約を生成"""
         features = {
             'tool_type': [],      # ツールの種類
             'integrations': [],   # 統合されているサービス/ツール
@@ -140,221 +122,160 @@ class GitHubTrendAnalyzer:
             'use_cases': []       # 具体的なユースケース
         }
         
-        # 各リポジトリの詳細分析
+        # 各リポジトリの分析
         for repo in trending_repos:
             desc = (repo['description'] or '').lower()
-            readme = repo.get('readme_content', '').lower()
+            readme = repo['readme_content'].lower()
             content = desc + ' ' + readme
-            
-            # ツールタイプの分析
-            if 'code interpreter' in content or 'code generation' in content:
-                features['tool_type'].append('コード生成/解釈')
-            if 'knowledge retrieval' in content or 'rag' in content:
-                features['tool_type'].append('知識検索/RAG')
-            
-            # 統合の分析
-            if 'discord' in content or 'slack' in content:
-                features['integrations'].append('チャットツール統合')
-            if 'chrome' in content or 'browser' in content:
-                features['integrations'].append('ブラウザ統合')
-            
-            # アーキテクチャの分析
-            if 'multi agent' in content or 'multi-agent' in content:
+
+            # 分類ロジック
+            if 'code' in content or 'coding' in content:
+                features['use_cases'].append('開発支援')
+            if 'research' in content or 'academic' in content:
+                features['use_cases'].append('研究支援')
+            if 'chat' in content or 'conversation' in content:
+                features['tool_type'].append('対話型AI')
+            if 'autonomous' in content:
+                features['architectures'].append('自律型')
+            if 'multi-agent' in content or 'multi agent' in content:
                 features['architectures'].append('マルチエージェント')
             if 'plugin' in content or 'extension' in content:
-                features['architectures'].append('プラグイン拡張')
-            
-            # ユースケースの分析
-            if 'trading' in content or 'market' in content:
-                features['use_cases'].append('取引/市場分析')
-            if 'coding assistant' in content or 'development' in content:
-                features['use_cases'].append('開発支援')
+                features['integrations'].append('プラグイン対応')
 
-        # 最も言及の多い特徴を抽出
-        trends = []
+        # 特徴の集計と分析
+        trend_summary = []
         for category, items in features.items():
             if items:
-                most_common = max(set(items), key=items.count)
-                if category == 'tool_type' and items:
-                    trends.append(f"{most_common}に特化したツールが注目を集めています")
-                elif category == 'integrations' and items:
-                    trends.append(f"{most_common}を実装したプロジェクトが増加傾向です")
-                elif category == 'architectures' and items:
-                    trends.append(f"{most_common}アーキテクチャを採用した実装が主流になっています")
-                elif category == 'use_cases' and items:
-                    trends.append(f"{most_common}向けの特化型エージェントの開発が活発です")
+                unique_items = list(set(items))
+                most_common = max(unique_items, key=items.count)
+                if len(items) >= 2:  # 十分なデータがある場合のみトレンドとして扱う
+                    if category == 'use_cases':
+                        trend_summary.append(f"{most_common}に特化したプロジェクトが増加しています")
+                    elif category == 'tool_type':
+                        trend_summary.append(f"{most_common}の実装が注目されています")
+                    elif category == 'architectures':
+                        trend_summary.append(f"{most_common}アーキテクチャの採用が進んでいます")
+                    elif category == 'integrations':
+                        trend_summary.append(f"{most_common}の実装が増えています")
 
-        # 要約をフォーマット
-        summary = f"# AI Agent GitHub Trend Report\n\n"
-        summary += f"生成日時: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-        summary += "## 本日のトレンド要約\n\n"
-        
-        # トレンドが見つかった場合のみ表示
-        main_points = [t for t in trends if t][:3]
-        if main_points:
-            for point in main_points:
-                summary += f"- {point}\n"
-        else:
-            summary += "- 本日は特筆すべき新しいトレンドは見られません\n"
-        summary += "\n"
-        
-        return summary
-        return summary
+        # トレンドが見つからない場合のデフォルトメッセージ
+        if not trend_summary:
+            trend_summary = ["現時点で特筆すべきトレンドは見られません"]
 
-    def analyze_repository_content(self, description, readme_content):
-        """リポジトリの内容を詳細に分析"""
-        content = (description or '').lower() + ' ' + (readme_content or '').lower()
-        
-        # 主な特徴を抽出
-        features = {
-            'framework': 'framework' in content or 'library' in content,
-            'autonomous': 'autonomous' in content or 'self-operating' in content,
-            'assistant': 'assistant' in content or 'chat' in content,
-            'multi_agent': 'multi agent' in content or 'multi-agent' in content,
-            'llm': 'llm' in content or 'language model' in content or 'gpt' in content,
-            'tools': 'tool' in content or 'plugin' in content,
-            'rag': 'rag' in content or 'retrieval' in content,
-            'web': 'browser' in content or 'web' in content,
-            'api': 'api' in content or 'rest' in content
-        }
-        
-        # 技術スタックを抽出
-        tech_stack = []
-        if 'python' in content: tech_stack.append('Python')
-        if 'javascript' in content or 'nodejs' in content: tech_stack.append('JavaScript')
-        if 'typescript' in content: tech_stack.append('TypeScript')
-        
-        # 統合サービスを抽出
-        integrations = []
-        if 'discord' in content: integrations.append('Discord')
-        if 'slack' in content: integrations.append('Slack')
-        if 'telegram' in content: integrations.append('Telegram')
-        
-        # ユースケースを抽出
-        use_cases = []
-        if 'development' in content or 'coding' in content: use_cases.append('開発支援')
-        if 'trading' in content or 'market' in content: use_cases.append('市場分析')
-        if 'research' in content or 'academic' in content: use_cases.append('研究支援')
-        if 'data analysis' in content or 'analytics' in content: use_cases.append('データ分析')
+        return trend_summary[:3]  # 上位3つのトレンドを返す
 
-        return features, tech_stack, integrations, use_cases
-
-    def extract_main_description(self, readme_content):
-        """READMEから主要な説明文を抽出"""
-        if not readme_content:
-            return ""
-            
-        lines = readme_content.split('\n')
-        description = []
-        in_description = False
+    def format_report(self, trending_repos):
+        """レポートを整形"""
+        report = "# AI Agent GitHub Trend Report\n\n"
+        report += f"生成日時: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+        report += "## 本日のトレンド要約\n\n"
         
-        for line in lines:
-            # HTMLタグを除去
-            line = line.replace('<p align="center">', '').replace('</p>', '')
-            line = line.strip()
-            
-            # 空行をスキップ
-            if not line:
-                continue
-                
-            # 見出しを検出
-            if line.startswith('#'):
-                # 説明セクションの開始を検出
-                if 'description' in line.lower() or 'about' in line.lower():
-                    in_description = True
-                    continue
-                # 他の見出しが来たら説明セクションの終了
-                elif in_description:
-                    break
-                continue
-            
-            # 見出しではない最初の意味のある行を取得
-            if not line.startswith('!') and not line.startswith('<') and not line.startswith('['):
-                description.append(line)
-                if len(description) >= 3:  # 最初の3行まで取得
-                    break
-        
-        return ' '.join(description).strip()
-
-    def translate_description(self, description, readme_content=''):
-        """説明文を日本語に要約"""
-        # READMEまたは説明から主要な説明文を抽出
-        main_description = self.extract_main_description(readme_content)
-        if not main_description:
-            main_description = description if description else "説明なし"
-            
-        # 専門用語の翻訳辞書
-        terms = {
-            'ai-powered': 'AI駆動の',
-            'framework': 'フレームワーク',
-            'agent': 'エージェント',
-            'autonomous': '自律型',
-            'multi-agent': 'マルチエージェント',
-            'language model': '言語モデル',
-            'llm': 'LLM',
-            'chat': 'チャット',
-            'assistant': 'アシスタント',
-            'automation': '自動化',
-            'workflow': 'ワークフロー',
-            'integration': '統合',
-            'platform': 'プラットフォーム',
-            'development': '開発',
-            'inference': '推論',
-            'training': 'トレーニング',
-            'deployment': 'デプロイメント'
-        }
-        
-        # 翻訳処理
-        translated = main_description.lower()
-        for eng, jpn in terms.items():
-            translated = translated.replace(eng.lower(), jpn)
-            
-        # 文章の整形
-        translated = translated.capitalize()
-        if not translated.endswith(('.', '。')):
-            translated += '。'
-            
-        return translated
-
-    def save_report(self, trending_repos, filename="ai_agent_trends_report.md"):
-        """マークダウンレポートを保存する"""
-        if not trending_repos:
-            report = "# AI Agent GitHub Trend Report\n\n"
-            report += f"生成日時: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-            report += "トレンドのあるリポジトリは見つかりませんでした。\n"
-            with open(filename, 'w', encoding='utf-8') as f:
-                f.write(report)
-            return
-
-        # 要約を生成
-        report = self.analyze_trends(trending_repos)
+        # トレンド要約を箇条書きで追加
+        trend_points = self.analyze_trends(trending_repos)
+        for point in trend_points:
+            report += f"- {point}\n"
+        report += "\n"
         
         # 各リポジトリの詳細
         for i, repo in enumerate(trending_repos, 1):
             report += f"## {i}. **[{repo['name']}]({repo['url']})**\n\n"
-            report += f"**概要**: {self.translate_description(repo['description'], repo['readme_content'])}\n\n"
-            report += f"**統計情報**:\n"
+            
+            # 概要の抽出と翻訳
+            description = self.extract_and_translate_description(repo['description'], repo['readme_content'])
+            report += f"**概要**:\n{description}\n\n"
+            
+            report += "**統計情報**:\n"
             report += f"- スター数: {repo['stars']} (1日あたり {repo['stars_per_day']})\n"
             report += f"- フォーク数: {repo['forks']} (1日あたり {repo['forks_per_day']})\n"
-            report += f"- 作成日: {repo['created_at']}\n"
+            report += f"- 作成日: {repo['created_at']}\n\n"
             
             # 作成者情報
             owner = repo['owner']
-            report += f"\n**作成者情報**:\n"
+            report += "**作成者情報**:\n"
             report += f"- 名前: {owner['name'] or owner['username']}\n"
             if owner['twitter']:
                 report += f"- Twitter: [@{owner['twitter']}](https://twitter.com/{owner['twitter']})\n"
             if owner['blog']:
                 report += f"- ブログ/サイト: {owner['blog']}\n"
-
-            # トークン情報（存在する場合のみ）
-            if repo['has_token']:
-                report += f"\n**トークン情報**:\n"
-                report += "- トークンの存在が確認されました\n"
-                if repo['token_details']:
-                    report += "- 関連キーワード: " + ", ".join(repo['token_details']) + "\n"
-            report += "\n---\n\n"
             
+            report += "\n---\n\n"
+        
+        return report
+
+    def extract_and_translate_description(self, description, readme_content):
+        """リポジトリの説明を抽出して翻訳"""
+        # READMEから主要な説明を抽出
+        main_content = ''
+        if readme_content:
+            lines = [line.strip() for line in readme_content.split('\n')]
+            content_lines = []
+            
+            # 意味のある行を探す
+            for line in lines:
+                # HTMLタグと特殊な記号を除去
+                line = re.sub(r'<[^>]+>', '', line)
+                line = re.sub(r'\[.*?\]', '', line)
+                line = line.strip()
+                
+                # 有効な説明文の条件
+                if line and not any(x in line.lower() for x in [
+                    'readme', 'language', 'english', '中文', '日本語', 'korean',
+                    'http', 'github', 'license', '# ', '## ', '### '
+                ]):
+                    content_lines.append(line)
+                    if len(content_lines) == 3:  # 最初の意味のある3行を取得
+                        break
+            
+            main_content = ' '.join(content_lines)
+        
+        # 説明がない場合はdescriptionを使用
+        if not main_content and description:
+            main_content = description
+        elif not main_content:
+            return "説明が提供されていません。"
+
+        # 翻訳辞書
+        translation_dict = {
+            'ai agent': 'AIエージェント',
+            'agent': 'エージェント',
+            'artificial intelligence': '人工知能',
+            'framework': 'フレームワーク',
+            'autonomous': '自律型',
+            'research': '研究',
+            'workflow': 'ワークフロー',
+            'implementation': '実装',
+            'development': '開発',
+            'experimental': '実験的',
+            'repository': 'リポジトリ',
+            'resources': 'リソース',
+            'collection': 'コレクション',
+            'machine learning': '機械学習',
+            'language model': '言語モデル',
+            'llm': 'LLM',
+            'integration': '統合',
+            'automation': '自動化',
+            'platform': 'プラットフォーム'
+        }
+
+        # 翻訳処理
+        translated = main_content.lower()
+        for eng, jpn in translation_dict.items():
+            translated = translated.replace(eng, jpn)
+
+        # 文章を整形
+        sentences = re.split(r'[.。]', translated)
+        sentences = [s.strip().capitalize() for s in sentences if s.strip()]
+        
+        # 3行以内に要約
+        summary = sentences[:3]
+        if summary:
+            return '。\n'.join(summary) + '。'
+        else:
+            return "説明が提供されていません。"
+
+    def save_report(self, trending_repos, filename="ai_agent_trends_report.md"):
+        """マークダウンレポートを保存する"""
+        report = self.format_report(trending_repos)
         with open(filename, 'w', encoding='utf-8') as f:
             f.write(report)
         print(f"レポートを {filename} に保存しました。")
