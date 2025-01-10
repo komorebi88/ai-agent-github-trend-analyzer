@@ -239,58 +239,80 @@ class GitHubTrendAnalyzer:
 
         return features, tech_stack, integrations, use_cases
 
-    def translate_description(self, description, readme_content=''):
-        """説明文を日本語に要約（詳細版）"""
-        if not description and not readme_content:
-            return "説明なし"
-        
-        # READMEからプロジェクト名と説明を抽出
-        readme_lines = readme_content.split('\n') if readme_content else []
-        main_description = ''
-        
-        # READMEの最初の意味のある行を探す
-        for line in readme_lines:
-            line = line.strip()
-            if line and not line.startswith('#') and not line.startswith('!['):
-                main_description = line
-                break
-        
-        # 説明がない場合はdescriptionを使用
-        if not main_description:
-            main_description = description
+    def extract_main_description(self, readme_content):
+        """READMEから主要な説明文を抽出"""
+        if not readme_content:
+            return ""
             
-        # ブロックチェーン/Web3関連キーワード
-        blockchain_terms = {
-            'on-chain': 'オンチェーン',
-            'smart contract': 'スマートコントラクト',
-            'validator': 'バリデータ',
-            'infrastructure': 'インフラストラクチャ',
-            'gateway': 'ゲートウェイ'
+        lines = readme_content.split('\n')
+        description = []
+        in_description = False
+        
+        for line in lines:
+            # HTMLタグを除去
+            line = line.replace('<p align="center">', '').replace('</p>', '')
+            line = line.strip()
+            
+            # 空行をスキップ
+            if not line:
+                continue
+                
+            # 見出しを検出
+            if line.startswith('#'):
+                # 説明セクションの開始を検出
+                if 'description' in line.lower() or 'about' in line.lower():
+                    in_description = True
+                    continue
+                # 他の見出しが来たら説明セクションの終了
+                elif in_description:
+                    break
+                continue
+            
+            # 見出しではない最初の意味のある行を取得
+            if not line.startswith('!') and not line.startswith('<') and not line.startswith('['):
+                description.append(line)
+                if len(description) >= 3:  # 最初の3行まで取得
+                    break
+        
+        return ' '.join(description).strip()
+
+    def translate_description(self, description, readme_content=''):
+        """説明文を日本語に要約"""
+        # READMEまたは説明から主要な説明文を抽出
+        main_description = self.extract_main_description(readme_content)
+        if not main_description:
+            main_description = description if description else "説明なし"
+            
+        # 専門用語の翻訳辞書
+        terms = {
+            'ai-powered': 'AI駆動の',
+            'framework': 'フレームワーク',
+            'agent': 'エージェント',
+            'autonomous': '自律型',
+            'multi-agent': 'マルチエージェント',
+            'language model': '言語モデル',
+            'llm': 'LLM',
+            'chat': 'チャット',
+            'assistant': 'アシスタント',
+            'automation': '自動化',
+            'workflow': 'ワークフロー',
+            'integration': '統合',
+            'platform': 'プラットフォーム',
+            'development': '開発',
+            'inference': '推論',
+            'training': 'トレーニング',
+            'deployment': 'デプロイメント'
         }
         
-        # 日本語に翻訳
+        # 翻訳処理
         translated = main_description.lower()
-        for eng, jpn in blockchain_terms.items():
+        for eng, jpn in terms.items():
             translated = translated.replace(eng.lower(), jpn)
             
-        # 一般的な説明を日本語化
-        translated = (
-            translated
-            .replace('ai-powered', 'AI駆動の')
-            .replace('framework', 'フレームワーク')
-            .replace('efficient', '効率的な')
-            .replace('unified', '統合された')
-            .replace('adaptive', '適応型の')
-            .replace('automation', '自動化')
-            .replace('seamless', 'シームレスな')
-            .replace('scalability', 'スケーラビリティ')
-            .replace('precision', '高精度')
-        )
-        
-        # 文章を整形
+        # 文章の整形
         translated = translated.capitalize()
-        if not translated.endswith('.'):
-            translated = translated + '。'
+        if not translated.endswith(('.', '。')):
+            translated += '。'
             
         return translated
 
