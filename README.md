@@ -1,9 +1,17 @@
-主な機能:
-GitHubのAPIを使用してAI Agent関連のリポジトリを検索
-スター数とフォーク数の成長率を計算
-トレンド分析とレポート生成
-日次での情報更新機能
+⚫️Main Features:
 
-トレンド判定基準:
-スター数：1日50以上
-フォーク数：1日10以上
+*Search for AI Agent-related repositories using GitHub's API
+
+*Calculate the growth rate of stars and forks
+
+*Perform trend analysis and generate reports
+
+*Daily information update functionality
+
+
+
+⚫️Trend Criteria:
+
+*Stars: 50 or more per day
+
+*Forks: 10 or more per day
